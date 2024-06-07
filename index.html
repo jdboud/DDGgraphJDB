@@ -6,10 +6,58 @@
     <style>
         body { margin: 0; background-color: #ffffff; }
         canvas { display: block; }
-        .controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; }
-        .slider-container { display: flex; align-items: center; margin: 5px; }
-        .slider-label { margin-right: 10px; }
-        .dropdown-container { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
+        .controls { 
+            position: absolute; 
+            bottom: 10px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+        }
+        .slider-container { 
+            display: flex; 
+            align-items: center; 
+            margin: 5px; 
+        }
+        .slider-label { 
+            margin-right: 10px; 
+            font-family: Arial, sans-serif; /* Change the font */
+            color: #333333; /* Change the label color */
+        }
+        .slider-container input[type="range"] {
+            -webkit-appearance: none; /* Override default CSS styles */
+            appearance: none;
+            width: 100px; /* Set slider width */
+            height: 10px; /* Set slider height */
+            background: #d3d3d3; /* Set slider track color */
+            outline: none; /* Remove outline */
+            opacity: 0.7; /* Set slider opacity */
+            transition: opacity .15s ease-in-out; /* Transition effect */
+        }
+        .slider-container input[type="range"]:hover {
+            opacity: 1; /* Increase opacity when hovered */
+        }
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; /* Override default CSS styles */
+            appearance: none;
+            width: 20px; /* Set thumb width */
+            height: 20px; /* Set thumb height */
+            background: #e4bb74; /* Set thumb color */
+            cursor: pointer; /* Change cursor to pointer */
+        }
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 20px; /* Set thumb width */
+            height: 20px; /* Set thumb height */
+            background: #e4bb74; /* Set thumb color */
+            cursor: pointer; /* Change cursor to pointer */
+        }
+        .dropdown-container { 
+            position: absolute; 
+            top: 10px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+        }
         select, input[type="range"] { touch-action: manipulation; } /* Improve touch interaction */
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -67,9 +115,13 @@
             <span class="slider-label">Zoom:</span>
             <input type="range" id="zoom" min="10" max="200" value="50" step="1">
         </div>
+        <div class="slider-container">
+            <span class="slider-label">Rotation:</span>
+            <input type="range" id="rotation" min="0" max="360" value="0" step="1">
+        </div>
     </div>
     <script>
-        fetch('https://jdboud.github.io/DDGgraph/data/binaryCleanUserNumberCollections3Test024.xlsx')
+        fetch('/data')
             .then(response => response.json())
             .then(data => {
                 console.log("Data received from /data endpoint:", data); // Inspect the data
@@ -290,7 +342,7 @@
                 });
 
                 // Position the camera at a 3/4 view
-                camera.position.set(90, -50, 100);
+                camera.position.set(50, 50, 50);
                 camera.lookAt(scene.position);
 
                 // Sliders for interactive camera position control
@@ -304,6 +356,7 @@
                 const sizeSlider = document.getElementById('size');
                 const lineWeightSlider = document.getElementById('lineWeight');
                 const zoomSlider = document.getElementById('zoom');
+                const rotationSlider = document.getElementById('rotation');
 
                 sliderX.addEventListener('input', () => {
                     camera.position.x = Number(sliderX.value);
@@ -323,6 +376,11 @@
                 zoomSlider.addEventListener('input', () => {
                     camera.zoom = Number(zoomSlider.value) / 50; // Adjust zoom factor as needed
                     camera.updateProjectionMatrix();
+                });
+
+                rotationSlider.addEventListener('input', () => {
+                    const rotationValue = Number(rotationSlider.value) * Math.PI / 180;
+                    camera.rotation.z = rotationValue;
                 });
 
                 function updateObjectPositions() {
@@ -390,3 +448,4 @@
     </script>
 </body>
 </html>
+
