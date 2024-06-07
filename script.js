@@ -74,6 +74,23 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
 
                 bar.position.set(posX, posY, posZ);
 
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
+
                 scene.add(bar);
                 objects.push(bar);
                 initialPositions.push({ x: posX, y: posY, z: posZ });
@@ -98,6 +115,23 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
                 const posZ = d.Z / zScalingFactor; // Scale and center the points
 
                 point.position.set(posX, posY, posZ);
+
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
 
                 scene.add(point);
                 objects.push(point); // Reusing objects array for scatter points
@@ -125,6 +159,24 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
 
             surface.rotation.x = -Math.PI / 2; // Rotate to make it horizontal
             surface.position.set(0, 0, 0);
+
+            // Check for NaN values before computing bounding sphere
+            const positions = geometry.attributes.position.array;
+            let hasNaN = false;
+            for (let i = 0; i < positions.length; i++) {
+                if (isNaN(positions[i])) {
+                    console.error('NaN found at index', i);
+                    hasNaN = true;
+                    break;
+                }
+            }
+
+            if (!hasNaN) {
+                geometry.computeBoundingSphere();
+            } else {
+                console.error('Bounding sphere computation aborted due to NaN values.');
+            }
+
             scene.add(surface);
             objects.push(surface);
         }
@@ -147,6 +199,23 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
                 const posZ = 0; // Keep planes on the same Z level
 
                 plane.position.set(posX, posY, posZ);
+
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
 
                 scene.add(plane);
                 objects.push(plane); // Reusing objects array for heatmap planes
@@ -182,6 +251,23 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
             const material = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 });
             const line = new THREE.Line(geometry, material);
 
+            // Check for NaN values before computing bounding sphere
+            const positions = geometry.attributes.position.array;
+            let hasNaN = false;
+            for (let i = 0; i < positions.length; i++) {
+                if (isNaN(positions[i])) {
+                    console.error('NaN found at index', i);
+                    hasNaN = true;
+                    break;
+                }
+            }
+
+            if (!hasNaN) {
+                geometry.computeBoundingSphere();
+            } else {
+                console.error('Bounding sphere computation aborted due to NaN values.');
+            }
+
             scene.add(line);
             objects.push(line);
         }
@@ -204,6 +290,23 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
                 const posZ = d.Z / (2 * zScalingFactor); // Set the height position based on density
 
                 cube.position.set(posX, posY, posZ);
+
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
 
                 scene.add(cube);
                 objects.push(cube); // Reusing objects array for 3D heatmap cubes
@@ -323,7 +426,6 @@ fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollection
             renderer.render(scene, camera);
         }
         animate();
-
         // Handle window resize
         window.addEventListener('resize', function() {
             const width = window.innerWidth;
