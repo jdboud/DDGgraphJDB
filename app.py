@@ -7,7 +7,7 @@ app = Flask(__name__, static_url_path='', static_folder='static')
 @app.route('/data')
 def get_data():
     # Load the new data format
-    file_path = '//DDGgraphJDB/static/data/binaryCleanUserNumberCollections3Test024.xlsx'
+    file_path = '/DDGgraphJDB/static/data/binaryCleanUserNumberCollections3Test024.xlsx'
     
     # Check if file exists
     if not os.path.exists(file_path):
