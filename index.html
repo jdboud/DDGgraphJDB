@@ -62,8 +62,7 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="script.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="dropdown-container">
@@ -123,10 +122,15 @@
         </div>
     </div>
     <script>
-        fetch('/data')
-            .then(response => response.json())
+        fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollections3Test024.xlsx')
+            .then(response => response.arrayBuffer())
             .then(data => {
-                console.log("Data received from /data endpoint:", data); // Inspect the data
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+
+                console.log("Data received from GitHub:", jsonData); // Inspect the data
 
                 // Create a scene, camera, and renderer
                 const scene = new THREE.Scene();
@@ -146,12 +150,12 @@
 
                 // Create a color scale for densities
                 const colorScale = d3.scaleSequential(d3.interpolateRgb("white", "salmon"))
-                    .domain(d3.extent(data, d => d.Density));
+                    .domain(d3.extent(jsonData, d => d.Density));
 
                 // Determine the bounds of the data for centering
-                const xExtent = d3.extent(data, d => d.X);
-                const yExtent = d3.extent(data, d => d.Y);
-                const zExtent = d3.extent(data, d => d.Z);
+                const xExtent = d3.extent(jsonData, d => d.X);
+                const yExtent = d3.extent(jsonData, d => d.Y);
+                const zExtent = d3.extent(jsonData, d => d.Z);
 
                 const xRange = xExtent[1] - xExtent[0];
                 const yRange = yExtent[1] - yExtent[0];
@@ -173,7 +177,7 @@
                     initialPositions = [];
 
                     // Create bars from data
-                    data.forEach(d => {
+                    jsonData.forEach(d => {
                         const geometry = new THREE.BoxGeometry(1, 1, d.Z / zScalingFactor);
                         const color = new THREE.Color(colorScale(d.Density));
                         const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
@@ -198,7 +202,7 @@
                     initialPositions = [];
 
                     // Create scatter points from data
-                    data.forEach(d => {
+                    jsonData.forEach(d => {
                         const geometry = new THREE.SphereGeometry(d.Z / zScalingFactor / 2, 16, 16);
                         const color = new THREE.Color(colorScale(d.Density));
                         const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
@@ -223,10 +227,10 @@
                     initialPositions = [];
 
                     // Create surface plot from data
-                    const gridSize = Math.sqrt(data.length);
+                    const gridSize = Math.sqrt(jsonData.length);
                     const geometry = new THREE.PlaneGeometry(gridSize, gridSize, gridSize - 1, gridSize - 1);
                     const vertices = geometry.attributes.position.array;
-                    data.forEach((d, i) => {
+                    jsonData.forEach((d, i) => {
                         vertices[i * 3 + 2] = d.Z / zScalingFactor; // Update Z value based on density
                     });
 
@@ -247,7 +251,7 @@
                     initialPositions = [];
 
                     // Create heatmap from data
-                    data.forEach(d => {
+                    jsonData.forEach(d => {
                         const geometry = new THREE.PlaneGeometry(1, 1);
                         const color = new THREE.Color(colorScale(d.Density));
                         const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
@@ -276,7 +280,7 @@
                     const vertices = [];
                     const colors = [];
 
-                    data.forEach(d => {
+                    jsonData.forEach(d => {
                         const posX = (d.X - xCenter) / xRange * 80;
                         const posY = (d.Y - yCenter) / yRange * 80;
                         const posZ = (d.Z / zScalingFactor);
@@ -304,7 +308,7 @@
                     initialPositions = [];
 
                     // Create 3D heatmap from data
-                    data.forEach(d => {
+                    jsonData.forEach(d => {
                         const geometry = new THREE.BoxGeometry(1, 1, d.Z / zScalingFactor);
                         const color = new THREE.Color(colorScale(d.Density));
                         const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
@@ -450,4 +454,3 @@
     </script>
 </body>
 </html>
-
