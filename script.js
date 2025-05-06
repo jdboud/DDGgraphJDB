@@ -1,296 +1,440 @@
-// script.js
+fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollections3Test024.xlsx')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => {
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-// ─── 1. Parse‐in Raw Data ─────────────────────────────────────────────────────
+        // Convert the JSON data to the required format
+        const formattedData = jsonData.slice(1).map(row => ({
+            X: row[0],
+            Y: row[1],
+            Z: row[2],
+            Density: row[3]
+        }));
 
-function parseMyLines(text) {
-  const recs = [];
-  text.split(/\r?\n/).forEach(line => {
-    const m = line.match(
-      /Y1:\s*(\d+)\s*Y2:\s*(\d+).*?Receiver\s*1:\s*([\d,\s]+)\s*-\s*PotVals:\s*([\d,\s]+)/
-    );
-    if (!m) return;
-    const X = +m[1], Y = +m[2];
-    const zs = m[3].split(',').map(s => +s.trim());
-    const ds = m[4].split(',').map(s => +s.trim());
-    zs.forEach((z, i) => {
-      if (ds[i] > 0) recs.push({ X, Y, Z: z, Density: ds[i] });
-    });
-  });
-  return recs;
-}
+        // Your existing visualization code goes here
 
-document.getElementById('parseBtn').addEventListener('click', () => {
-  const txt = document.getElementById('rawData').value.trim();
-  if (!txt) return alert('Please paste your data first.');
-  const records = parseMyLines(txt);
-  if (!records.length) return alert('No valid records found.');
-  renderVisualization(records);
-});
+        // Create a scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0xffffff, 1); // Set background to white
+        document.body.appendChild(renderer.domElement);
 
+        // Set up lights
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(0, 1, 1).normalize();
+        scene.add(light);
 
-// ─── 2. Three.js & D3 Setup ──────────────────────────────────────────────────
+        const ambientLight = new THREE.AmbientLight(0xfffff4, 1);
+        scene.add(ambientLight);
 
-// Scene, camera, renderer
-const scene    = new THREE.Scene();
-const camera   = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xffffff, 1);
-document.body.appendChild(renderer.domElement);
+        // Create a color scale for densities
+        const colorScale = d3.scaleSequential(d3.interpolateRgb("white", "salmon"))
+            .domain(d3.extent(formattedData, d => d.Density));
 
-// Lights
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(0, 1, 1).normalize();
-scene.add(light);
-scene.add(new THREE.AmbientLight(0xfffff4, 1));
+        // Determine the bounds of the data for centering
+        const xExtent = d3.extent(formattedData, d => d.X);
+        const yExtent = d3.extent(formattedData, d => d.Y);
+        const zExtent = d3.extent(formattedData, d => d.Z);
 
-// Globals
-let formattedData     = [];
-let objects           = [];
-let initialPositions  = [];
-let colorScale;
-let xExtent, yExtent, xRange, yRange, xCenter, yCenter;
-const zScalingFactor  = 1000;
+        const xRange = xExtent[1] - xExtent[0];
+        const yRange = yExtent[1] - yExtent[0];
+        const zRange = zExtent[1] - zExtent[0];
 
-// Compute extents & color scale
-function computeScales() {
-  xExtent = d3.extent(formattedData, d => d.X);
-  yExtent = d3.extent(formattedData, d => d.Y);
-  xRange  = xExtent[1] - xExtent[0];
-  yRange  = yExtent[1] - yExtent[0];
-  xCenter = (xExtent[0] + xExtent[1]) / 2;
-  yCenter = (yExtent[0] + yExtent[1]) / 2;
-  colorScale = d3.scaleSequential(d3.interpolateRgb("white", "salmon"))
-                 .domain(d3.extent(formattedData, d => d.Density));
-}
+        const xCenter = (xExtent[0] + xExtent[1]) / 2;
+        const yCenter = (yExtent[0] + yExtent[1]) / 2;
+        const zCenter = (zExtent[0] + zExtent[1]) / 2;
 
+        const zScalingFactor = 1000; // Adjust this factor to scale Z heights for better visualization
 
-// ─── 3. Graph‐Creation Functions ─────────────────────────────────────────────
+        let objects = [];
+        let initialPositions = [];
 
-function createBarGraph() {
-  formattedData.forEach(d => {
-    const geom     = new THREE.BoxGeometry(1, 1, d.Z / zScalingFactor);
-    const mat      = new THREE.MeshPhongMaterial({ color: new THREE.Color(colorScale(d.Density)), transparent:true, opacity:0.8 });
-    const bar      = new THREE.Mesh(geom, mat);
-    const posX     = (d.X - xCenter)/xRange*80;
-    const posY     = (d.Y - yCenter)/yRange*80;
-    const posZ     = d.Z/(2*zScalingFactor);
-    bar.position.set(posX, posY, posZ);
+        function createBarGraph() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
 
-    // bounding sphere guard
-    if (!Array.from(geom.attributes.position.array).some(isNaN)) {
-      geom.computeBoundingSphere();
-    }
+            // Create bars from data
+            formattedData.forEach(d => {
+                const geometry = new THREE.BoxGeometry(1, 1, d.Z / zScalingFactor);
+                const color = new THREE.Color(colorScale(d.Density));
+                const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
+                const bar = new THREE.Mesh(geometry, material);
 
-    scene.add(bar);
-    objects.push(bar);
-    initialPositions.push({ x:posX, y:posY, z:posZ });
-  });
-}
+                const posX = (d.X - xCenter) / xRange * 80; // Scale and center the bars
+                const posY = (d.Y - yCenter) / yRange * 80; // Scale and center the bars
+                const posZ = (d.Z / (2 * zScalingFactor)); // Center the bars on the Z axis
 
-function createScatterPlot() {
-  formattedData.forEach(d => {
-    const geom = new THREE.SphereGeometry(d.Z/zScalingFactor/2, 16, 16);
-    const mat  = new THREE.MeshPhongMaterial({ color: new THREE.Color(colorScale(d.Density)), transparent:true, opacity:0.8 });
-    const pt   = new THREE.Mesh(geom, mat);
-    const posX = (d.X - xCenter)/xRange*80;
-    const posY = (d.Y - yCenter)/yRange*80;
-    const posZ = d.Z/zScalingFactor;
-    pt.position.set(posX, posY, posZ);
+                bar.position.set(posX, posY, posZ);
 
-    if (!Array.from(geom.attributes.position.array).some(isNaN)) {
-      geom.computeBoundingSphere();
-    }
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
 
-    scene.add(pt);
-    objects.push(pt);
-    initialPositions.push({ x:posX, y:posY, z:posZ });
-  });
-}
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
 
-function createSurfacePlot() {
-  const gridSize = Math.sqrt(formattedData.length);
-  const geom     = new THREE.PlaneGeometry(gridSize, gridSize, gridSize-1, gridSize-1);
-  const verts    = geom.attributes.position.array;
-  formattedData.forEach((d,i) => {
-    verts[i*3+2] = d.Z/zScalingFactor;
-  });
-  geom.computeVertexNormals();
-  if (!verts.some(isNaN)) geom.computeBoundingSphere();
-  const mat     = new THREE.MeshPhongMaterial({ color:0x999999, side:THREE.DoubleSide, flatShading:true });
-  const surf    = new THREE.Mesh(geom, mat);
-  surf.rotation.x = -Math.PI/2;
-  scene.add(surf);
-  objects.push(surf);
-}
+                scene.add(bar);
+                objects.push(bar);
+                initialPositions.push({ x: posX, y: posY, z: posZ });
+            });
+        }
 
-function createHeatmap() {
-  formattedData.forEach(d => {
-    const geom = new THREE.PlaneGeometry(1,1);
-    const mat  = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorScale(d.Density)), transparent:true, opacity:0.8 });
-    const pl   = new THREE.Mesh(geom, mat);
-    const posX = (d.X - xCenter)/xRange*80;
-    const posY = (d.Y - yCenter)/yRange*80;
-    pl.position.set(posX, posY, 0);
+        function createScatterPlot() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
 
-    if (!Array.from(geom.attributes.position.array).some(isNaN)) {
-      geom.computeBoundingSphere();
-    }
+            // Create scatter points from data
+            formattedData.forEach(d => {
+                const geometry = new THREE.SphereGeometry(d.Z / zScalingFactor / 2, 16, 16);
+                const color = new THREE.Color(colorScale(d.Density));
+                const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
+                const point = new THREE.Mesh(geometry, material);
 
-    scene.add(pl);
-    objects.push(pl);
-    initialPositions.push({ x:posX, y:posY, z:0 });
-  });
-}
+                const posX = (d.X - xCenter) / xRange * 80; // Scale and center the points
+                const posY = (d.Y - yCenter) / yRange * 80; // Scale and center the points
+                const posZ = d.Z / zScalingFactor; // Scale and center the points
 
-function createLineGraph() {
-  const geom = new THREE.BufferGeometry();
-  const verts = [], cols = [];
-  formattedData.forEach(d => {
-    const posX = (d.X - xCenter)/xRange*80;
-    const posY = (d.Y - yCenter)/yRange*80;
-    const posZ = d.Z/zScalingFactor;
-    verts.push(posX, posY, posZ);
-    const c = new THREE.Color(colorScale(d.Density));
-    cols.push(c.r, c.g, c.b);
-  });
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
-  geom.setAttribute('color',    new THREE.Float32BufferAttribute(cols,3));
-  if (!verts.some(isNaN)) geom.computeBoundingSphere();
-  const mat = new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:0.8 });
-  const line = new THREE.Line(geom, mat);
-  scene.add(line);
-  objects.push(line);
-}
+                point.position.set(posX, posY, posZ);
 
-function create3DHeatmap() {
-  formattedData.forEach(d => {
-    const geom = new THREE.BoxGeometry(1,1,d.Z/zScalingFactor);
-    const mat  = new THREE.MeshPhongMaterial({ color: new THREE.Color(colorScale(d.Density)), transparent:true, opacity:0.8 });
-    const cube = new THREE.Mesh(geom, mat);
-    const posX = (d.X - xCenter)/xRange*80;
-    const posY = (d.Y - yCenter)/yRange*80;
-    const posZ = d.Z/(2*zScalingFactor);
-    cube.position.set(posX, posY, posZ);
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
 
-    if (!Array.from(geom.attributes.position.array).some(isNaN)) {
-      geom.computeBoundingSphere();
-    }
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
 
-    scene.add(cube);
-    objects.push(cube);
-    initialPositions.push({ x:posX, y:posY, z:posZ });
-  });
-}
+                scene.add(point);
+                objects.push(point); // Reusing objects array for scatter points
+                initialPositions.push({ x: posX, y: posY, z: posZ });
+            });
+        }
 
+        function createSurfacePlot() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
 
-// ─── 4. Render & Controls ────────────────────────────────────────────────────
+            // Create surface plot from data
+            const gridSize = Math.sqrt(formattedData.length);
+            const geometry = new THREE.PlaneGeometry(gridSize, gridSize, gridSize - 1, gridSize - 1);
+            const vertices = geometry.attributes.position.array;
+            formattedData.forEach((d, i) => {
+                vertices[i * 3 + 2] = d.Z / zScalingFactor; // Update Z value based on density
+            });
 
-function renderVisualization(data) {
-  formattedData = data;
-  computeScales();
-  objects.forEach(o => scene.remove(o));
-  objects = [];
-  initialPositions = [];
+            geometry.computeVertexNormals();
+            const material = new THREE.MeshPhongMaterial({ color: 0x999999, side: THREE.DoubleSide, flatShading: true });
+            const surface = new THREE.Mesh(geometry, material);
 
-  const type = document.getElementById('visualizationType').value;
-  if (type === 'bar')     createBarGraph();
-  else if (type === 'scatter')  createScatterPlot();
-  else if (type === 'surface')  createSurfacePlot();
-  else if (type === 'heatmap')  createHeatmap();
-  else if (type === 'line')     createLineGraph();
-  else if (type === '3dheatmap') create3DHeatmap();
-}
+            surface.rotation.x = -Math.PI / 2; // Rotate to make it horizontal
+            surface.position.set(0, 0, 0);
 
-document.getElementById('visualizationType')
-  .addEventListener('change', () => renderVisualization(formattedData));
+            // Check for NaN values before computing bounding sphere
+            const positions = geometry.attributes.position.array;
+            let hasNaN = false;
+            for (let i = 0; i < positions.length; i++) {
+                if (isNaN(positions[i])) {
+                    console.error('NaN found at index', i);
+                    hasNaN = true;
+                    break;
+                }
+            }
 
-// Sliders
-const sliderX = document.getElementById('sliderX');
-const sliderY = document.getElementById('sliderY');
-const sliderZ = document.getElementById('sliderZ');
-const scaleX  = document.getElementById('scaleX');
-const scaleY  = document.getElementById('scaleY');
-const scaleZ  = document.getElementById('scaleZ');
-const opacity = document.getElementById('opacity');
-const size    = document.getElementById('size');
-const lw      = document.getElementById('lineWeight');
-const zoom    = document.getElementById('zoom');
-const rot     = document.getElementById('rotation');
+            if (!hasNaN) {
+                geometry.computeBoundingSphere();
+            } else {
+                console.error('Bounding sphere computation aborted due to NaN values.');
+            }
 
-sliderX .addEventListener('input', ()=>{ camera.position.x = +sliderX.value; camera.lookAt(scene.position); });
-sliderY .addEventListener('input', ()=>{ camera.position.y = +sliderY.value; camera.lookAt(scene.position); });
-sliderZ .addEventListener('input', ()=>{ camera.position.z = +sliderZ.value; camera.lookAt(scene.position); });
-zoom    .addEventListener('input', ()=>{ camera.zoom = +zoom.value/50; camera.updateProjectionMatrix(); });
-rot     .addEventListener('input', ()=>{ camera.rotation.z = +rot.value*Math.PI/180; });
+            scene.add(surface);
+            objects.push(surface);
+        }
 
-function updateObjectPositions() {
-  const sx = +scaleX.value/80, sy = +scaleY.value/80, sz = +scaleZ.value/80;
-  objects.forEach((o,i) => {
-    o.position.set(
-      initialPositions[i].x * sx,
-      initialPositions[i].y * sy,
-      initialPositions[i].z * sz
-    );
-  });
-}
-function updateOpacity() {
-  const v = +opacity.value;
-  objects.forEach(o => o.material.opacity = v);
-}
-function updateSize() {
-  const v = +size.value;
-  objects.forEach(o => {
-    if (o.geometry instanceof THREE.BoxGeometry || o.geometry instanceof THREE.SphereGeometry) {
-      o.scale.set(v, v, v);
-    }
-  });
-}
-function updateLineWeight() {
-  const v = +lw.value;
-  objects.forEach(o => {
-    if (o instanceof THREE.Line) o.material.linewidth = v;
-  });
-}
+        function createHeatmap() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
 
-scaleX.addEventListener('input', updateObjectPositions);
-scaleY.addEventListener('input', updateObjectPositions);
-scaleZ.addEventListener('input', updateObjectPositions);
-opacity.addEventListener('input', updateOpacity);
-size.addEventListener('input', updateSize);
-lw.addEventListener('input', updateLineWeight);
+            // Create heatmap from data
+            formattedData.forEach(d => {
+                const geometry = new THREE.PlaneGeometry(1, 1);
+                const color = new THREE.Color(colorScale(d.Density));
+                const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
+                const plane = new THREE.Mesh(geometry, material);
 
+                const posX = (d.X - xCenter) / xRange * 80; // Scale and center the planes
+                const posY = (d.Y - yCenter) / yRange * 80; // Scale and center the planes
+                const posZ = 0; // Keep planes on the same Z level
 
-// ─── 5. Fallback XLSX Load ───────────────────────────────────────────────────
+                plane.position.set(posX, posY, posZ);
 
-if (!document.getElementById('rawData').value.trim()) {
-  fetch('https://jdboud.github.io/DDGgraphJDB/data/binaryCleanUserNumberCollections3Test024.xlsx')
-    .then(r => r.arrayBuffer())
-    .then(buf => {
-      const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-      const arr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })
-        .slice(1)
-        .map(r => ({ X: r[0], Y: r[1], Z: r[2], Density: r[3] }))
-        .filter(d => d.Density > 0);
-      renderVisualization(arr);
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
+
+                scene.add(plane);
+                objects.push(plane); // Reusing objects array for heatmap planes
+                initialPositions.push({ x: posX, y: posY, z: posZ });
+            });
+        }
+
+        function createLineGraph() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
+
+            // Create line graph from data
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const colors = [];
+
+            formattedData.forEach(d => {
+                const posX = (d.X - xCenter) / xRange * 80;
+                const posY = (d.Y - yCenter) / yRange * 80;
+                const posZ = (d.Z / zScalingFactor);
+
+                vertices.push(posX, posY, posZ);
+
+                const color = new THREE.Color(colorScale(d.Density));
+                colors.push(color.r, color.g, color.b);
+            });
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const material = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8 });
+            const line = new THREE.Line(geometry, material);
+
+            // Check for NaN values before computing bounding sphere
+            const positions = geometry.attributes.position.array;
+            let hasNaN = false;
+            for (let i = 0; i < positions.length; i++) {
+                if (isNaN(positions[i])) {
+                    console.error('NaN found at index', i);
+                    hasNaN = true;
+                    break;
+                }
+            }
+
+            if (!hasNaN) {
+                geometry.computeBoundingSphere();
+            } else {
+                console.error('Bounding sphere computation aborted due to NaN values.');
+            }
+
+            scene.add(line);
+            objects.push(line);
+        }
+
+        function create3DHeatmap() {
+            // Remove existing objects
+            objects.forEach(object => scene.remove(object));
+            objects = [];
+            initialPositions = [];
+
+            // Create 3D heatmap from data
+            formattedData.forEach(d => {
+                const geometry = new THREE.BoxGeometry(1, 1, d.Z / zScalingFactor);
+                const color = new THREE.Color(colorScale(d.Density));
+                const material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.8 });
+                const cube = new THREE.Mesh(geometry, material);
+
+                const posX = (d.X - xCenter) / xRange * 80; // Scale and center the cubes
+                const posY = (d.Y - yCenter) / yRange * 80; // Scale and center the cubes
+                const posZ = d.Z / (2 * zScalingFactor); // Set the height position based on density
+
+                cube.position.set(posX, posY, posZ);
+
+                // Check for NaN values before computing bounding sphere
+                const positions = geometry.attributes.position.array;
+                let hasNaN = false;
+                for (let i = 0; i < positions.length; i++) {
+                    if (isNaN(positions[i])) {
+                        console.error('NaN found at index', i);
+                        hasNaN = true;
+                        break;
+                    }
+                }
+
+                if (!hasNaN) {
+                    geometry.computeBoundingSphere();
+                } else {
+                    console.error('Bounding sphere computation aborted due to NaN values.');
+                }
+
+                scene.add(cube);
+                objects.push(cube); // Reusing objects array for 3D heatmap cubes
+                initialPositions.push({ x: posX, y: posY, z: posZ });
+            });
+        }
+
+        // Initial visualization
+        createBarGraph();
+
+        // Handle visualization type change
+        const visualizationType = document.getElementById('visualizationType');
+        visualizationType.addEventListener('change', (event) => {
+            if (event.target.value === 'bar') {
+                createBarGraph();
+            } else if (event.target.value === 'scatter') {
+                createScatterPlot();
+            } else if (event.target.value === 'surface') {
+                createSurfacePlot();
+            } else if (event.target.value === 'heatmap') {
+                createHeatmap();
+            } else if (event.target.value === 'line') {
+                createLineGraph();
+            } else if (event.target.value === '3dheatmap') {
+                create3DHeatmap();
+            }
+        });
+
+        // Position the camera at a 3/4 view
+        camera.position.set(50, 50, 50);
+        camera.lookAt(scene.position);
+
+        // Sliders for interactive camera position control
+        const sliderX = document.getElementById('sliderX');
+        const sliderY = document.getElementById('sliderY');
+        const sliderZ = document.getElementById('sliderZ');
+        const scaleX = document.getElementById('scaleX');
+        const scaleY = document.getElementById('scaleY');
+        const scaleZ = document.getElementById('scaleZ');
+        const opacitySlider = document.getElementById('opacity');
+        const sizeSlider = document.getElementById('size');
+        const lineWeightSlider = document.getElementById('lineWeight');
+        const zoomSlider = document.getElementById('zoom');
+        const rotationSlider = document.getElementById('rotation');
+
+        sliderX.addEventListener('input', () => {
+            camera.position.x = Number(sliderX.value);
+            camera.lookAt(scene.position);
+        });
+
+        sliderY.addEventListener('input', () => {
+            camera.position.y = Number(sliderY.value);
+            camera.lookAt(scene.position);
+        });
+
+        sliderZ.addEventListener('input', () => {
+            camera.position.z = Number(sliderZ.value);
+            camera.lookAt(scene.position);
+        });
+
+        zoomSlider.addEventListener('input', () => {
+            camera.zoom = Number(zoomSlider.value) / 50; // Adjust zoom factor as needed
+            camera.updateProjectionMatrix();
+        });
+
+        rotationSlider.addEventListener('input', () => {
+            const rotationValue = Number(rotationSlider.value) * Math.PI / 180;
+            camera.rotation.z = rotationValue;
+        });
+
+        function updateObjectPositions() {
+            const scaleXValue = Number(scaleX.value) / 80;
+            const scaleYValue = Number(scaleY.value) / 80;
+            const scaleZValue = Number(scaleZ.value) / 80;
+            objects.forEach((object, index) => {
+                object.position.x = initialPositions[index].x * scaleXValue;
+                object.position.y = initialPositions[index].y * scaleYValue;
+                object.position.z = initialPositions[index].z * scaleZValue;
+            });
+        }
+
+        function updateOpacity() {
+            const opacityValue = Number(opacitySlider.value);
+            objects.forEach(object => {
+                object.material.opacity = opacityValue;
+            });
+        }
+
+        function updateSize() {
+            const sizeValue = Number(sizeSlider.value);
+            objects.forEach(object => {
+                if (object.geometry instanceof THREE.BoxGeometry || object.geometry instanceof THREE.SphereGeometry) {
+                    object.scale.set(sizeValue, sizeValue, sizeValue);
+                }
+            });
+        }
+
+        function updateLineWeight() {
+            const lineWeightValue = Number(lineWeightSlider.value);
+            objects.forEach(object => {
+                if (object instanceof THREE.Line) {
+                    object.material.linewidth = lineWeightValue;
+                }
+            });
+        }
+
+        scaleX.addEventListener('input', updateObjectPositions);
+        scaleY.addEventListener('input', updateObjectPositions);
+        scaleZ.addEventListener('input', updateObjectPositions);
+        opacitySlider.addEventListener('input', updateOpacity);
+        sizeSlider.addEventListener('input', updateSize);
+        lineWeightSlider.addEventListener('input', updateLineWeight);
+
+        // Render the scene
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        });
     })
-    .catch(err => console.error('Fetch XLSX error:', err));
-}
-
-
-// ─── 6. Camera & Animate ────────────────────────────────────────────────────
-
-camera.position.set(50, 50, 50);
-camera.lookAt(scene.position);
-
-function animate() {
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-});
+    .catch(error => {
+        console.error('Error fetching data:', error);
+    });
