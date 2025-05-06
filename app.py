@@ -4,23 +4,23 @@ import os
 
 app = Flask(__name__, static_url_path='', static_folder='static')
 
-@app.route('/data')
-def get_data():
-    # Load the new data format
-    file_path = 'data/binaryCleanUserNumberCollections3Test024.xlsx'
-    
-    # Check if file exists
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return jsonify({"error": f"File not found: {file_path}"}), 404
-    
-    try:
-        # Specify column names manually
-        df = pd.read_excel(file_path, header=None, names=['X', 'Y', 'Z', 'Density'])
-    except Exception as e:
-        print(f"Error reading file: {e}")
-        return jsonify({"error": f"Error reading file: {e}"}), 500
-
+@app.route('/parse', methods=['POST'])
+def parse_text():
+    text = request.get_data(as_text=True)
+    import re
+    recs = []
+    for line in text.splitlines():
+        m = re.search(
+          r'Y1:\s*(\d+)\s*Y2:\s*(\d+).*?Receiver\s*1:\s*([\d,\s]+)\s*-\s*PotVals:\s*([\d,\s]+)',
+          line
+        )
+        if not m: continue
+        X, Y = map(int, m.groups()[:2])
+        zs = [int(z) for z in m.group(3).split(',')]
+        ds = [int(d) for d in m.group(4).split(',')]
+        for z,d in zip(zs, ds):
+            if d>0: recs.append({'X':X,'Y':Y,'Z':z,'Density':d})
+    return jsonify(recs)
 
     # Print column names for debugging
     print("DataFrame columns:\n", df.columns)
